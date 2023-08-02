@@ -12,14 +12,8 @@ using UnityEngine;
 public struct RawColoredPoint
 {
     public int3 position;
-    public Vector3 color;
-    public float intensity;
-}
-
-[StructLayout(LayoutKind.Sequential)]
-public struct ColoredPoint
-{
-    public Vector3 position;
-    public Vector3 color;
-    public float intensity;
+    public ushort r;
+    public ushort g;
+    public ushort b;
+    public ushort intensity;
 }

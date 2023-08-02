@@ -4,6 +4,8 @@ namespace DefaultNamespace
 {
     public struct PointCloudStats
     {
+        public ulong pointCount; 
+            
         /// <summary>
         /// middle of the boundaries, in world coordinates.
         /// </summary>
@@ -52,14 +54,21 @@ namespace DefaultNamespace
         /// </summary>
         public double3 scaleFactor;
 
-        public PointCloudStats(double3 center, double3 min, double3 max, double3 offset, double3 scaleFactor, bool hasIntensity)
+        public PointCloudStats(ulong pointCount, double3 center, double3 min, double3 max, double3 offset, 
+            double3 scaleFactor, bool hasIntensity)
         {
+            this.pointCount = pointCount;
             this.center = center;
             this.min = min;
             this.max = max;
             this.hasIntensity = hasIntensity;
             this.offset = offset;
             this.scaleFactor = scaleFactor;
+        }
+
+        public override string ToString()
+        {
+            return $"{nameof(pointCount)}: {pointCount}, {nameof(center)}: {center}, {nameof(min)}: {min}, {nameof(max)}: {max}";
         }
     }
 }

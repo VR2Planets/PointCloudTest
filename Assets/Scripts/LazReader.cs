@@ -61,8 +61,10 @@ namespace DefaultNamespace
                 _lazReader.header.y_offset,
                 _lazReader.header.z_offset
             );
-
-            return new PointCloudStats(_center, min, max, _originalOffset, scaleFactor, true);
+            
+            
+            return new PointCloudStats(_lazReader.header.extended_number_of_point_records, 
+                _center, min, max, _originalOffset, scaleFactor, true);
         }
 
         public int ReadRawPoints(RawColoredPoint[] points, int length)
@@ -80,13 +82,13 @@ namespace DefaultNamespace
                 p.position.x = _lazReader.point.X;
                 p.position.y = _lazReader.point.Y;
                 p.position.z = _lazReader.point.Z;
+                
                 var rgb = _lazReader.point.rgb;
-                p.color = new Vector3(
-                    rgb[0] / (float) ushort.MaxValue,
-                    rgb[1] / (float) ushort.MaxValue,
-                    rgb[2] / (float) ushort.MaxValue
-                );
-                p.intensity = _lazReader.point.intensity / (float) ushort.MaxValue;
+                p.r = rgb[0];
+                p.g = rgb[1];
+                p.b = rgb[2];
+                
+                p.intensity = _lazReader.point.intensity;
 
                 points[i] = p;
             }
