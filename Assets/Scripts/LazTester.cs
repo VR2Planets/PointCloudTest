@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -15,31 +16,38 @@ namespace DefaultNamespace
  
         public unsafe async void Start()
         {
-            LaszipNative.laszip_get_version(
-                out byte version_major,
-                out byte version_minor,
-                out short version_revision,
-                out int version_build);
-                
-            Debug.Log($"Laszip version {version_major}.{version_minor}.{version_revision}.{version_build}");
+            using (var readers = new ConcurrentObjectPool<LasZipReader>(() => new LasZipReader(_path)))
+            {
 
-            //https://liblas-devel.osgeo.narkive.com/8pZUgprX/fast-way-to-read-compressed-laz-files
-            long chunkSize = 50000;
-            long rowCount = GetRowCount();
-            long chunks = (long)Math.Ceiling(rowCount / (double)chunkSize);
+                LaszipNative.laszip_get_version(
+                    out byte version_major,
+                    out byte version_minor,
+                    out short version_revision,
+                    out int version_build);
 
-            var sw = new Stopwatch();
-            sw.Start();
+                Debug.Log($"Laszip version {version_major}.{version_minor}.{version_revision}.{version_build}");
 
-            Parallel.For(0, chunks,
-                index => {
-                    Read(index * chunkSize, chunkSize);
-            });
+                //https://liblas-devel.osgeo.narkive.com/8pZUgprX/fast-way-to-read-compressed-laz-files
+                long chunkSize = 50000;
+                long rowCount = GetRowCount();
+                long chunks = (long)Math.Ceiling(rowCount / (double)chunkSize);
 
-            var ts = sw.Elapsed;
-            sw.Stop();
-                
-            Debug.Log($"Time to read files {ts}");
+                var sw = new Stopwatch();
+                sw.Start();
+
+                Parallel.For(0, chunks,
+                    index =>
+                    {
+                        var reader = readers.Get();
+                        reader.Read(index * chunkSize, chunkSize);
+                        readers.Return(reader);
+                    });
+
+                var ts = sw.Elapsed;
+                sw.Stop();
+
+                Debug.Log($"Time to read files {ts}");
+            }
         }
         
         public unsafe long GetRowCount()
@@ -90,74 +98,26 @@ namespace DefaultNamespace
             return 0;
         }
         
-        public unsafe void Read(long offset, long length)
+        public class ConcurrentObjectPool<T> : IDisposable where T : IDisposable
         {
-            if (LaszipNative.laszip_create(out laszip_POINTER pointer))
+            private readonly ConcurrentBag<T> _objects;
+            private readonly Func<T> _objectGenerator;
+
+            public ConcurrentObjectPool(Func<T> objectGenerator)
             {
-                Debug.LogError($"Error creating laszip_POINTER");
+                _objectGenerator = objectGenerator ?? throw new ArgumentNullException(nameof(objectGenerator));
+                _objects = new ConcurrentBag<T>();
             }
-            else
+
+            public T Get() => _objects.TryTake(out T item) ? item : _objectGenerator();
+
+            public void Return(T item) => _objects.Add(item);
+
+            public void Dispose()
             {
-                try
+                while (_objects.TryTake(out var obj))
                 {
-                    if (LaszipNative.laszip_open_reader(pointer, _path, out var is_compressed))
-                    {
-                        Debug.LogError($"Error opening reader laszip_POINTER");
-                    }
-                    else
-                    {
-                        Debug.Log($"Opened las file is_compressed: {is_compressed}");
-                        
-                        if (LaszipNative.laszip_get_point_pointer(pointer, out var point))
-                        {
-                            Debug.LogError($"Error opening reader laszip_POINTER");
-                        }
-                        else
-                        {
-                         
-                            if (offset > 0 && LaszipNative.laszip_seek_point(pointer, offset))
-                            {
-                                Debug.LogError($"Error seeking reader laszip_POINTER");
-                            }
-                            else
-                            {
-
-
-                                try
-                                {
-                                    long pointsRead = 0;
-                                    while (!LaszipNative.laszip_read_point(pointer))
-                                    {
-                                        //Debug.LogError($"Point {point->X}, {point->Y}, {point->Z}");
-                                        //
-                                        //if (count++ > 100)
-                                        //{
-                                        //    break;
-                                        //}
-                                        pointsRead++;
-                                        if (pointsRead >= length)
-                                        {
-                                            break;
-                                        }
-                                    }
-                                }
-                                finally
-                                {
-                                    if (LaszipNative.laszip_close_reader(pointer))
-                                    {
-                                        Debug.LogError($"Error closing laszip_POINTER");
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                finally
-                {
-                    if (LaszipNative.laszip_destroy(pointer))
-                    {
-                        Debug.LogError($"Error destroying laszip_POINTER");
-                    }
+                    obj.Dispose();
                 }
             }
         }
